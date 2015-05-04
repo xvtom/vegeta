@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/gob"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -30,6 +32,8 @@ func attackCmd() command {
 	fs.StringVar(&opts.outputf, "output", "stdout", "Output file")
 	fs.StringVar(&opts.bodyf, "body", "", "Requests body file")
 	fs.StringVar(&opts.certf, "cert", "", "x509 Certificate file")
+	fs.StringVar(&opts.clientCertf, "client-cert", "", "Client certificate file")
+	fs.StringVar(&opts.clientKeyf, "client-key", "", "Client key file")
 	fs.BoolVar(&opts.lazy, "lazy", false, "Read targets lazily")
 	fs.DurationVar(&opts.duration, "duration", 10*time.Second, "Duration of the test")
 	fs.DurationVar(&opts.timeout, "timeout", vegeta.DefaultTimeout, "Requests timeout")
@@ -59,6 +63,8 @@ type attackOpts struct {
 	outputf     string
 	bodyf       string
 	certf       string
+	clientCertf string
+	clientKeyf  string
 	lazy        bool
 	duration    time.Duration
 	timeout     time.Duration
@@ -129,6 +135,12 @@ func attack(opts *attackOpts) (err error) {
 	if opts.certf != "" {
 		if tlsc.RootCAs, err = certPool(cert); err != nil {
 			return err
+		}
+	}
+	if opts.clientCertf != "" && opts.clientKeyf != "" {
+		cert := loadClientCertificate(opts.clientCertf, opts.clientKeyf)
+		if cert != nil {
+			tlsc.Certificates = []tls.Certificate{*cert}
 		}
 	}
 
@@ -206,4 +218,13 @@ func certPool(cert []byte) (*x509.CertPool, error) {
 		return nil, errBadCert
 	}
 	return pool, nil
+}
+
+func loadClientCertificate(certf string, keyf string) *tls.Certificate {
+	cert, err := tls.LoadX509KeyPair(certf, keyf)
+	if err != nil {
+		log.Fatal("failed LoadX509KeyPair", err)
+		return nil
+	}
+	return &cert
 }
